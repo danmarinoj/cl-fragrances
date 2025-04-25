@@ -4,6 +4,11 @@
   :author "Daniel Marino Johnson <daniel@marino-johnson.org>"
   :maintainer "Daniel Marino Johnson <daniel@marino-johnson.org>"
   :description "TUI for designing fragrances"
-  :components ((:file "package")
-	       (:file "fragrances"))
-  :depends-on (:sqlite :cl-ascii-table :cl-readline))
+  :depends-on (:sqlite :cl-ascii-table :cl-readline :str :uiop)
+  :components
+  ((:module "src"
+    :components
+    ((:file "package")
+     (:file "utils")
+     (:file "calculations")
+     (:file "main")))))
