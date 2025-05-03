@@ -3,10 +3,6 @@
 (defun compute-percentage (formula-tuple total-parts)
   (* 100 (float (/ (cadr formula-tuple) total-parts))))
 
-(defun compute-total-parts (formula)
-  (reduce #'(lambda (running-sum formula-tuple) (+ running-sum (cadr formula-tuple)))
-	  formula :initial-value 0))
-
 (defun import-accord-factors (accord proportion)
   (let ((accord-total
 	  (reduce #'(lambda (running-sum x) (+ running-sum (cadr x)))

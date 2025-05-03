@@ -27,11 +27,3 @@
 (defun parse-float (value)
   (with-input-from-string (in value)
     (read in)))
-
-(defun tabulate (formula-name data column-names totals)
-  (let ((table (ascii-table:make-table column-names :header formula-name)))
-    (dolist (row data)
-      (ascii-table:add-row table row))
-    (ascii-table:add-separator table)
-    (ascii-table:add-row table totals)
-    (ascii-table:display table)))

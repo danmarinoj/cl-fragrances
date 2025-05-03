@@ -9,6 +9,8 @@
   ((:module "src"
     :components
     ((:file "package")
+     (:file "classes")
+     (:file "db")
      (:file "utils")
      (:file "calculations")
      (:file "main")))))

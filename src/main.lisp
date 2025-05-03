@@ -26,26 +26,9 @@
   (string-downcase
    (read-line *query-io*)))
 
-(defun prompt-value (prompt)
+(defun prompt-value (prompt &key (default NIL))
   (rl:readline :prompt (format NIL "~c[35m~a:~c[0m " #\ESC prompt #\ESC)
 	       :add-history T))
-
-(defun get-formula (formula-name)
-  (sqlite:execute-to-list *db* (format NIL "SELECT * FROM ~a" formula-name)))
-
-(defun print-formula (formula-name)
-  (let ((formula (get-formula formula-name)))
-    (let* ((total-parts (compute-total-parts formula))
-	   (formula-with-percentages (mapcar
-				      #'(lambda (formula-tuple)
-					  (reverse
-					;add in the percentage
-					   (cons (compute-percentage formula-tuple total-parts)
-						 (reverse formula-tuple))))
-				      formula)))
-      (tabulate formula-name formula-with-percentages
-		'("Raw Material" "Proportion" "Percentage")
-		(list "Total" total-parts 100)))))
 
 (defun list-formulas (on-choose-function)
   (format T "Formulas:~%")
@@ -66,48 +49,41 @@
    #'(lambda (formula-name)
        (modify-data-menu formula-name))))
 
-(defun new-formula (formula-name)
-  (sqlite:execute-non-query
-   *db*
-   (format NIL "CREATE TABLE ~a (raw_material string, proportion integer)" formula-name))
-  (modify-data-menu formula-name))
-
-(defun insert (formula-name raw-material proportion)
-  (sqlite:execute-non-query
-   *db*
-   (format NIL "INSERT INTO ~a (raw_material, proportion) VALUES (?, ?)" formula-name)
-   raw-material proportion))
-
 (defun insert-menu (formula-name)
   (let ((raw-material (prompt-value "Raw material"))
-	(proportion (prompt-value "Proportion")))
-    (insert formula-name raw-material proportion)))
-
-(defun update (formula-name raw-material proportion)
-  (sqlite:execute-non-query
-   *db*
-   (format NIL "UPDATE ~a SET proportion = ~a WHERE raw_material = '~a'"
-	   formula-name proportion raw-material)))
+	(concentration (parse-integer (prompt-value "Concentration")))
+	(proportion (parse-integer (prompt-value "Proportion"))))
+    (iud-record (make-instance 'formula-item
+			       :raw-material raw-material
+			       :concentration concentration
+			       :proportion proportion)
+		formula-name *db* :operation "i")))
 
 (defun update-menu (formula-name)
   (let ((raw-material (prompt-value "Raw material"))
-	(proportion (prompt-value "Proportion")))
-    (update formula-name raw-material proportion)))
+	(concentration (parse-integer (prompt-value "Concentration")))
+	(proportion (parse-integer (prompt-value "Proportion"))))
+    (iud-record (make-instance 'formula-item
+			       :raw-material raw-material
+			       :concentration concentration
+			       :proportion proportion)
+		formula-name *db* :operation "u")))
 
 (defun delete-menu (formula-name)
   (let ((raw-material (prompt-value "Raw material")))
-    (sqlite:execute-non-query *db*
-     (format NIL "DELETE FROM ~a WHERE raw_material = '~a'" formula-name raw-material))))
+    (iud-record (make-instance 'formula-item
+			       :raw-material raw-material)
+		formula-name *db* :operation "d")))
 
 (defun import-accord-menu (formula-name)
   (list-formulas
    #'(lambda (accord-name)
        (let ((proportion (parse-integer (prompt-value "Proportion")))
-	     (accord (get-formula accord-name)))
+	     (accord (formula-from-db *db* accord-name)))
 	 (destructuring-bind (accord-factor formula-factor)
 	     (import-accord-factors accord proportion)
 	   ;; update values in old formula
-	   (dolist (formula-tuple (get-formula formula-name))
+	   (dolist (formula-tuple (formula-from-db *db* formula-name))
 	     (update formula-name (car formula-tuple) (* formula-factor (cadr formula-tuple))))
 	   ;; add the accord
 	   (dolist (formula-tuple accord)
@@ -128,7 +104,7 @@
 (defun calculate-menu (formula-name)
   (let ((raw-material (prompt-value "Raw material"))
 	(amount (parse-float (prompt-value "Amount")))
-	(formula (get-formula formula-name)))
+	(formula (formula-from-db *db* formula-name)))
     (let* ((proportion (sqlite:execute-single
 			*db*
 			(format NIL "SELECT proportion FROM ~a WHERE raw_material = ?" formula-name)
@@ -149,27 +125,28 @@
   (let ((help-message (concatenate 'string
 				   "(P)rint, (I)nsert, (U)pdate, (D)elete, Import (A)ccord,~%"
 				   "(B)ulk import, (C)alculate, (H)elp~%"))
+	(formula (formula-from-db *db* formula-name))
 	choice)
     (format T help-message)
     (loop while (not (equal choice "q")) do
       (progn
 	(setf choice (prompt formula-name))
-	(if (equal choice "p")
-	    (print-formula formula-name)
-	    (if (equal choice "i")
-		(insert-menu formula-name)
-		(if (equal choice "u")
-		    (update-menu formula-name)
-		    (if (equal choice "d")
-			(delete-menu formula-name)
-			(if (equal choice "a")
-			    (import-accord-menu formula-name)
-			    (if (equal choice "b")
-				(bulk-import-menu formula-name)
-				(if (equal choice "c")
-				    (calculate-menu formula-name)
-				    (if (equal choice "h")
-					(format T help-message)))))))))))))
+	(cond ((equal choice "p")
+	       (format T "~a" formula))
+	      ((equal choice "i")
+	       (setf formula (insert-menu formula-name)))
+	      ((equal choice "u")
+	       (setf formula (update-menu formula-name)))
+	      ((equal choice "d")
+	       (setf formula (delete-menu formula-name)))
+	      ((equal choice "a")
+	       (import-accord-menu formula-name))
+	      ((equal choice "b")
+	       (bulk-import-menu formula-name))
+	      ((equal choice "c")
+	       (calculate-menu formula-name))
+	      ((equal choice "h")
+	       (format T help-message)))))))
 
 (defun calculate-dilution-menu ()
   (let ((total-mass (parse-float (prompt-value "Total mass")))
@@ -184,10 +161,11 @@
   (let (choice)
     (loop while (not (equal choice "q")) do
       (setf choice (prompt "fragrances"))
-      (if (equal choice "l")
-	  (list-formulas-to-edit)
-	  (if (equal choice "n")
-	      (new-formula (prompt-value "New formula name"))
-	      (if (equal choice "d")
-		  (calculate-dilution-menu))))))
+      (cond ((equal choice "l")
+	     (list-formulas-to-edit))
+	    ((equal choice "n")
+	     (new-formula *db* (prompt-value "New formula name"))
+	     (modify-data-menu formula-name))
+	    ((equal choice "d")
+	     (calculate-dilution-menu)))))
   (sqlite:disconnect *db*))
