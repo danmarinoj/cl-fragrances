@@ -49,29 +49,29 @@
    #'(lambda (formula-name)
        (modify-data-menu formula-name))))
 
-(defun insert-menu (formula-name)
-  (let ((raw-material (prompt-value "Raw material"))
-	(concentration (parse-integer (prompt-value "Concentration")))
-	(proportion (parse-integer (prompt-value "Proportion"))))
-    (iud-record (make-instance 'formula-item
-			       :raw-material raw-material
-			       :concentration concentration
-			       :proportion proportion)
-		formula-name *db* :operation "i")))
-
-(defun update-menu (formula-name)
-  (let ((raw-material (prompt-value "Raw material"))
-	(concentration (parse-integer (prompt-value "Concentration")))
-	(proportion (parse-integer (prompt-value "Proportion"))))
-    (iud-record (make-instance 'formula-item
-			       :raw-material raw-material
-			       :concentration concentration
-			       :proportion proportion)
-		formula-name *db* :operation "u")))
+(defun upsert-menu (formula-name operation)
+  (let (item
+	(formula-type (formula-type formula-name)))
+    (setf item
+	  (cond ((eq formula-type :formula)
+		 (let ((raw-material (prompt-value "Raw material"))
+		       (concentration (parse-integer (prompt-value "Concentration")))
+		       (proportion (parse-integer (prompt-value "Proportion"))))
+		   (make-instance 'formula-item
+				  :raw-material raw-material
+				  :concentration concentration
+				  :proportion proportion)))
+		((eq formula-type :formula-no-c)
+		 (let ((raw-material (prompt-value "Raw material"))
+		       (proportion (parse-integer (prompt-value "Proportion"))))
+		   (make-instance 'formula-item-no-c
+				  :raw-material raw-material
+				  :proportion proportion)))))
+    (iud-record item formula-name *db* :operation operation)))
 
 (defun delete-menu (formula-name)
   (let ((raw-material (prompt-value "Raw material")))
-    (iud-record (make-instance 'formula-item
+    (iud-record (make-instance 'formula-item-no-c
 			       :raw-material raw-material)
 		formula-name *db* :operation "d")))
 
@@ -89,8 +89,8 @@
 	   (dolist (formula-tuple accord)
 	     (insert formula-name (car formula-tuple) (* accord-factor (cadr formula-tuple)))))))))
 
-(defun bulk-import-menu (formula-name)
-  (let (formula quit line)
+(defun bulk-import-menu (formula)
+  (let (quit line)
     (loop while (not quit) do
       (let ((line (rl:readline)))
 	(if (equal line "q")
@@ -98,28 +98,20 @@
 	    (destructuring-bind (raw-material quantity) (uiop:split-string line :separator ",")
 	      (setf formula (cons `(,raw-material ,(parse-float quantity)) formula))))))
     ;; add the records
-    (dolist (formula-tuple (integer-proportions-from-fractions (reverse formula)))
-      (insert formula-name (car formula-tuple) (cadr formula-tuple)))))
+    (formula-to-db *db* formula)
+    formula))
 
-(defun calculate-menu (formula-name)
+(defun calculate-menu (formula)
   (let ((raw-material (prompt-value "Raw material"))
-	(amount (parse-float (prompt-value "Amount")))
-	(formula (formula-from-db *db* formula-name)))
-    (let* ((proportion (sqlite:execute-single
-			*db*
-			(format NIL "SELECT proportion FROM ~a WHERE raw_material = ?" formula-name)
-			raw-material))
+	(amount (parse-float (prompt-value "Amount"))))
+    (let* ((proportion (get-proportion
+			(car
+			 (remove-if-not
+			  #'(lambda (item) (equal raw-material (get-raw-material item)))
+			  (formula-items formula)))))
 	   (unit (/ amount proportion))
-	   (formula-with-mass (mapcar #'(lambda (formula-tuple)
-					  (reverse (cons
-					;add in the number of grams
-						    (* unit (cadr formula-tuple))
-						    (reverse formula-tuple))))
-				      formula))
-	   (total-parts (compute-total-parts formula)))
-      (tabulate formula-name formula-with-mass
-		'("Raw Material" "Proportion" "Mass (g)")
-		(list "Total" total-parts (* total-parts unit))))))
+	   (formula-with-mass (formula-with-mass-from-formula formula unit)))
+      (format T "~a" formula-with-mass))))
 
 (defun modify-data-menu (formula-name)
   (let ((help-message (concatenate 'string
@@ -134,17 +126,17 @@
 	(cond ((equal choice "p")
 	       (format T "~a" formula))
 	      ((equal choice "i")
-	       (setf formula (insert-menu formula-name)))
+	       (setf formula (upsert-menu formula-name choice)))
 	      ((equal choice "u")
-	       (setf formula (update-menu formula-name)))
+	       (setf formula (upsert-menu formula-name choice)))
 	      ((equal choice "d")
 	       (setf formula (delete-menu formula-name)))
 	      ((equal choice "a")
 	       (import-accord-menu formula-name))
 	      ((equal choice "b")
-	       (bulk-import-menu formula-name))
+	       (setf formula (bulk-import-menu formula)))
 	      ((equal choice "c")
-	       (calculate-menu formula-name))
+	       (calculate-menu formula))
 	      ((equal choice "h")
 	       (format T help-message)))))))
 
