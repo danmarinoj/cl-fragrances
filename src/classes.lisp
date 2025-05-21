@@ -31,6 +31,10 @@
 			 :initarg :aromatic-percentages
 			 :initform (make-hash-table :test 'equal))))
 
+(defclass formula-with-mass-no-c (formula-no-c)
+  ((masses :accessor formula-masses
+	   :initform (make-hash-table :test 'equal))))
+
 (defclass formula-with-mass (formula)
   ((masses :accessor formula-masses
 	   :initform (make-hash-table :test 'equal))
@@ -106,6 +110,20 @@
 	      data
 	      '("Raw Material" "@" "Proportion" "%" "% aromatic")
 	      '(3 4)
+	      stream)))
+
+(defmethod print-object ((my-formula formula-with-mass-no-c) stream)
+  (let ((data (mapcar #'(lambda (item)
+			  (let ((raw-material (get-raw-material item)))
+			    (list raw-material
+				  (get-proportion item)
+				  (gethash raw-material (formula-percentages my-formula))
+				  (gethash raw-material (formula-masses my-formula)))))
+		      (formula-items my-formula))))
+    (tabulate (formula-name my-formula)
+	      data
+	      '("Raw Material" "Proportion" "%" "Mass")
+	      '(2 3)			;dont want to round aromatic mass
 	      stream)))
 
 (defmethod print-object ((my-formula formula-with-mass) stream)

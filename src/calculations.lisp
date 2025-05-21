@@ -1,5 +1,18 @@
 (in-package #:fragrances)
 
+(defmethod formula-with-mass-from-formula ((my-formula formula-no-c) unit)
+  (let ((my-formula-with-mass
+	  (make-instance 'formula-with-mass-no-c
+			 :name (formula-name my-formula)
+			 :items (formula-items my-formula)
+			 :percentages (formula-percentages my-formula))))
+    (dolist (item (formula-items my-formula-with-mass))
+      (let ((raw-material (get-raw-material item))
+	    (proportion (get-proportion item)))
+	(setf (gethash raw-material (formula-masses my-formula-with-mass))
+	      (* unit proportion))))
+    my-formula-with-mass))
+
 (defmethod formula-with-mass-from-formula ((my-formula formula) unit)
   (let ((my-formula-with-mass
 	  (make-instance 'formula-with-mass
