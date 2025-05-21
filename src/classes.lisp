@@ -123,7 +123,7 @@
     (tabulate (formula-name my-formula)
 	      data
 	      '("Raw Material" "Proportion" "%" "Mass")
-	      '(2 3)			;dont want to round aromatic mass
+	      '(2 3)
 	      stream)))
 
 (defmethod print-object ((my-formula formula-with-mass) stream)
