@@ -1,5 +1,8 @@
 (in-package #:fragrances)
 
+(defvar *db* (sqlite:connect
+	      (concatenate 'string *fragrance-home* "/fragrances.db")))
+
 (defun formula-type (formula-name)
   (let ((columns
 	  (mapcar #'cadr (sqlite:execute-to-list *db*
@@ -11,10 +14,10 @@
 	:formula
 	:formula-no-c)))
 
-(defun formula-from-db (db formula-name)
+(defun formula-from-db (formula-name)
   (cond ((eq (formula-type formula-name) :formula)
 	 (let ((query-result (sqlite:execute-to-list
-			      db
+			      *db*
 			      (format
 			       NIL
 			       (concatenate 'string
@@ -32,7 +35,7 @@
 		    query-result))))
 	((eq (formula-type formula-name) :formula-no-c)
 	 (let ((query-result (sqlite:execute-to-list
-			      db
+			      *db*
 			      (format
 			       NIL
 			       (concatenate 'string
@@ -48,18 +51,18 @@
 						      :proportion (cadr record)))
 		    query-result))))))
 
-(defun formula-to-db (db formula)
+(defun formula-to-db (formula)
   (let ((formula-name (formula-name formula)))
     (sqlite:execute-non-query (format NIL "DELETE FROM ~a" formula-name))
     (dolist (item (formula-items formula))
-      (iud-record item formula-name db :operation "i"))))
+      (iud-record item formula-name :operation "i"))))
 
-(defgeneric iud-record (my-formula-item formula-name db &key operation))
+(defgeneric iud-record (my-formula-item formula-name &key operation))
 (defmethod iud-record ((my-formula-item formula-item)
-		       formula-name db &key operation)
+		       formula-name &key operation)
   (cond ((equal operation "i")
 	 (sqlite:execute-non-query
-	  db
+	  *db*
 	  (format NIL
 		  "INSERT INTO ~a (raw_material, concentration, proportion) VALUES (?, ?, ?)"
 		  formula-name)
@@ -68,7 +71,7 @@
 	  (get-proportion my-formula-item)))
 	((equal operation "u")
 	 (sqlite:execute-non-query
-	  db
+	  *db*
 	  (format NIL
 		  "UPDATE ~a SET concentration = ~a, proportion = ~a WHERE raw_material = '~a'"
 		  formula-name
@@ -77,18 +80,18 @@
 		  (get-raw-material my-formula-item))))
 	((equal operation "d")
 	 (sqlite:execute-non-query
-	  db
+	  *db*
 	  (format NIL
 		  "DELETE FROM ~a WHERE raw_material = '~a'"
 		  formula-name
 		  (get-raw-material my-formula-item)))))
-  (formula-from-db db formula-name))
+  (formula-from-db formula-name))
 
 (defmethod iud-record ((my-formula-item formula-item-no-c)
-		       formula-name db &key operation)
+		       formula-name &key operation)
   (cond ((equal operation "i")
 	 (sqlite:execute-non-query
-	  db
+	  *db*
 	  (format NIL
 		  "INSERT INTO ~a (raw_material, proportion) VALUES (?, ?)"
 		  formula-name)
@@ -96,7 +99,7 @@
 	  (get-proportion my-formula-item)))
 	((equal operation "u")
 	 (sqlite:execute-non-query
-	  db
+	  *db*
 	  (format NIL
 		  "UPDATE ~a SET proportion = ~a WHERE raw_material = '~a'"
 		  formula-name
@@ -104,14 +107,17 @@
 		  (get-raw-material my-formula-item))))
 	((equal operation "d")
 	 (sqlite:execute-non-query
-	  db
+	  *db*
 	  (format NIL
 		  "DELETE FROM ~a WHERE raw_material = '~a'"
 		  formula-name
 		  (get-raw-material my-formula-item)))))
-  (formula-from-db db formula-name))
+  (formula-from-db formula-name))
 
-(defun new-formula (db formula-name)
+(defun new-formula (formula-name)
   (sqlite:execute-non-query
-   db
+   *db*
    (format NIL "CREATE TABLE ~a (raw_material string, proportion integer)" formula-name)))
+
+(defun disconnect-db ()
+  (sqlite:disconnect *db*))

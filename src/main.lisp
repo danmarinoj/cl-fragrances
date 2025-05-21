@@ -1,7 +1,6 @@
 (in-package #:fragrances)
 
 ;; variables
-(defvar *db* (sqlite:connect (my-getenv "FRAGRANCE_PATH" "fragrances.db")))
 (defvar *completions-list*
   (let ((tables (list-tables *db*)))
     (let ((raw-materials (mapcar #'car (sqlite:execute-to-list
@@ -49,6 +48,26 @@
    #'(lambda (formula-name)
        (modify-data-menu formula-name))))
 
+(defun experiment-menu (formula-name)
+  (let ((name (prompt-value "Experiment name"))
+	(id "asdfuiop")
+	(base-formula formula-name)
+	(hypothesis (prompt-value "Hypothesis")))
+    (new-formula id)
+    (dolist (item (formula-items (formula-from-db formula-name)))
+      (iud-record item id :operation "i"))
+    (modify-data-menu id)
+    (let (my-experiment
+	  (conclusion (prompt-value "Conclusion")))
+      (setf my-experiment (make-instance 'experiment
+					 :name name
+					 :id id
+					 :base-formula formula-name
+					 :hypothesis hypothesis
+					 :conclusion conclusion))
+      (format T my-experiment)
+      (save my-experiment))))
+
 (defun upsert-menu (formula-name operation)
   (let (item
 	(formula-type (formula-type formula-name)))
@@ -67,23 +86,23 @@
 		   (make-instance 'formula-item-no-c
 				  :raw-material raw-material
 				  :proportion proportion)))))
-    (iud-record item formula-name *db* :operation operation)))
+    (iud-record item formula-name :operation operation)))
 
 (defun delete-menu (formula-name)
   (let ((raw-material (prompt-value "Raw material")))
     (iud-record (make-instance 'formula-item-no-c
 			       :raw-material raw-material)
-		formula-name *db* :operation "d")))
+		formula-name :operation "d")))
 
 (defun import-accord-menu (formula-name)
   (list-formulas
    #'(lambda (accord-name)
        (let ((proportion (parse-integer (prompt-value "Proportion")))
-	     (accord (formula-from-db *db* accord-name)))
+	     (accord (formula-from-db accord-name)))
 	 (destructuring-bind (accord-factor formula-factor)
 	     (import-accord-factors accord proportion)
 	   ;; update values in old formula
-	   (dolist (formula-tuple (formula-from-db *db* formula-name))
+	   (dolist (formula-tuple (formula-from-db formula-name))
 	     (update formula-name (car formula-tuple) (* formula-factor (cadr formula-tuple))))
 	   ;; add the accord
 	   (dolist (formula-tuple accord)
@@ -98,7 +117,7 @@
 	    (destructuring-bind (raw-material quantity) (uiop:split-string line :separator ",")
 	      (setf formula (cons `(,raw-material ,(parse-float quantity)) formula))))))
     ;; add the records
-    (formula-to-db *db* formula)
+    (formula-to-db formula)
     formula))
 
 (defun calculate-menu (formula)
@@ -115,9 +134,10 @@
 
 (defun modify-data-menu (formula-name)
   (let ((help-message (concatenate 'string
-				   "(P)rint, (I)nsert, (U)pdate, (D)elete, Import (A)ccord,~%"
+				   "(P)rint, (E)xperiment,~%"
+				   "(I)nsert, (U)pdate, (D)elete, Import (A)ccord,~%"
 				   "(B)ulk import, (C)alculate, (H)elp~%"))
-	(formula (formula-from-db *db* formula-name))
+	(formula (formula-from-db formula-name))
 	choice)
     (format T help-message)
     (loop while (not (equal choice "q")) do
@@ -125,6 +145,8 @@
 	(setf choice (prompt formula-name))
 	(cond ((equal choice "p")
 	       (format T "~a" formula))
+	      ((equal choice "e")
+	       (experiment-menu formula-name))
 	      ((equal choice "i")
 	       (setf formula (upsert-menu formula-name choice)))
 	      ((equal choice "u")
@@ -157,8 +179,8 @@
 	     (list-formulas-to-edit))
 	    ((equal choice "n")
 	     (let ((formula-name (prompt-value "New formula name")))
-	       (new-formula *db* formula-name)
+	       (new-formula formula-name)
 	       (modify-data-menu formula-name)))
 	    ((equal choice "d")
 	     (calculate-dilution-menu)))))
-  (sqlite:disconnect *db*))
+  (disconnect-db))

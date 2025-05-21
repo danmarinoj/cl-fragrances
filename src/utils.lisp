@@ -1,13 +1,13 @@
 (in-package #:fragrances)
 
-(defun my-getenv (name &optional default)
-  (or
-   #+Allegro (sys:getenv name)
-   #+CLISP (ext:getenv name)
-   #+ECL (si:getenv name)
-   #+SBCL (sb-unix::posix-getenv name)
-   #+LISPWORKS (lispworks:environment-variable name)
-   default))
+;; (defun my-getenv (name &optional default)
+;;   (or
+;;    #+Allegro (sys:getenv name)
+;;    #+CLISP (ext:getenv name)
+;;    #+ECL (si:getenv name)
+;;    #+SBCL 
+;;    #+LISPWORKS (lispworks:environment-variable name)
+;;    default))
 
 (defun list-tables (db)
   (mapcar

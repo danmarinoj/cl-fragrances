@@ -142,3 +142,33 @@
 	      '("Raw Material" "@" "Proportion" "%" "% arom." "Mass" "Mass arom.")
 	      '(3 4 5)			;dont want to round aromatic mass
 	      stream)))
+
+(defclass experiment ()
+  ((name :accessor experiment-name
+	 :initarg :name
+	 :type string)
+   (id :accessor experiment-id
+       :initarg :id
+       :initform ""
+       :type string)
+   (parent :accessor experiment-parent
+	   :initarg :parent
+	   :initform NIL)
+   (base-formula :accessor experiment-base-formula
+		 :initarg :base-formula
+		 :type string)
+   (branches :accessor experiment-branches
+	     :initarg :branches
+	     :initform NIL
+	     :type list)
+   (hypothesis :accessor experiment-hypothesis
+	       :initarg :hypothesis
+	       :initform ""
+	       :type string)
+   (conclusion :accessor experiment-conclusion
+	       :initarg :conclusion
+	       :initform ""
+	       :type string)))
+
+(defgeneric to-sexp (my-experiment))
+(defgeneric save (my-experiment))
