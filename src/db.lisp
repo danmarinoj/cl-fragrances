@@ -45,7 +45,7 @@
 			       formula-id))))
 	   (make-instance
 	    'formula-no-c
-	    :name formula-id
+	    :id formula-id
 	    :items
 	    (mapcar #'(lambda (record) (make-instance 'formula-item-no-c
 						      :raw-material (car record)
