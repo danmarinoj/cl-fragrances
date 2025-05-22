@@ -149,11 +149,10 @@
 	 :type string)
    (id :accessor experiment-id
        :initarg :id
-       :initform ""
-       :type string)
+       :type integer)
    (parent :accessor experiment-parent
 	   :initarg :parent
-	   :initform NIL)
+	   :initform integer)
    (base-formula :accessor experiment-base-formula
 		 :initarg :base-formula
 		 :type string)
@@ -169,6 +168,3 @@
 	       :initarg :conclusion
 	       :initform ""
 	       :type string)))
-
-(defgeneric to-sexp (my-experiment))
-(defgeneric save (my-experiment))

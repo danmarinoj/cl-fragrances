@@ -1,22 +1,22 @@
 (in-package #:fragrances)
 
-;; variables
-(defvar *completions-list*
-  (let ((tables (list-tables *db*)))
-    (let ((raw-materials (mapcar #'car (sqlite:execute-to-list
-					*db*
-					(build-raw-ingredient-query tables)))))
-      raw-materials)))
+;; ;; variables
+;; (defvar *completions-list*
+;;   (let ((tables (list-tables *db*)))
+;;     (let ((raw-materials (mapcar #'car (sqlite:execute-to-list
+;; 					*db*
+;; 					(build-raw-ingredient-query tables)))))
+;;       raw-materials)))
 
-;; setup completion
-(defun custom-complete (text start end)
-  (let ((els (remove-if-not (lambda (it)
-                                         (str:starts-with? text it))
-                                       *completions-list*)))
-    (if (cdr els)
-        (cons (str:prefix els) els)
-        els)))
-(rl:register-function :complete #'custom-complete)
+;; ;; setup completion
+;; (defun custom-complete (text start end)
+;;   (let ((els (remove-if-not (lambda (it)
+;;                                          (str:starts-with? text it))
+;;                                        *completions-list*)))
+;;     (if (cdr els)
+;;         (cons (str:prefix els) els)
+;;         els)))
+;; (rl:register-function :complete #'custom-complete)
 
 ;; define prompts
 (defun prompt (prompt)
@@ -50,23 +50,16 @@
 
 (defun experiment-menu (formula-name)
   (let ((name (prompt-value "Experiment name"))
-	(id "asdfuiop")
 	(base-formula formula-name)
-	(hypothesis (prompt-value "Hypothesis")))
-    (new-formula id)
-    (dolist (item (formula-items (formula-from-db formula-name)))
-      (iud-record item id :operation "i"))
-    (modify-data-menu id)
-    (let (my-experiment
-	  (conclusion (prompt-value "Conclusion")))
-      (setf my-experiment (make-instance 'experiment
-					 :name name
-					 :id id
-					 :base-formula formula-name
-					 :hypothesis hypothesis
-					 :conclusion conclusion))
-      (format T my-experiment)
-      (save my-experiment))))
+	(hypothesis (prompt-value "Hypothesis"))
+	my-experiment)
+    (setf my-experiment
+	  (experiment-from-db
+	   (new-experiment name NIL formula-name NIL hypothesis "")))
+    (modify-data-menu (format NIL "experiment_~a" (experiment-id my-experiment)))
+    (let ((conclusion (prompt-value "Conclusion")))
+      (setf (experiment-conclusion my-experiment) conclusion))
+    (format T "~a" my-experiment)))
 
 (defun upsert-menu (formula-name operation)
   (let (item

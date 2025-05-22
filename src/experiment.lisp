@@ -44,14 +44,4 @@
     (with-open-file (stream file-name :if-does-not-exist NIL)
       (experiment-from-sexp (read stream)))))
 
-(defmethod print-object ((my-experiment experiment) stream)
-  (format stream "~a~%Variation on ~a~%~a~%~%Hypothesis: ~a~%~%"
-	  (experiment-name my-experiment)
-	  (experiment-base-formula my-experiment)
-	  (let ((parent (experiment-parent my-experiment)))
-	    (if parent (format "Parent experiment: ~a" parent) "root experiment"))
-	  (experiment-hypothesis my-experiment))
-  (format stream "<Insert formula here>~%")
-  (format stream "~%Conclusion: ~a~%Branches:~%~:(~{~a~^~%~}~)~%"
-	  (experiment-conclusion my-experiment)
-	  (mapcar #'experiment-name (experiment-branches my-experiment))))
+

@@ -1,7 +1,8 @@
 (in-package #:fragrances)
 
-(defvar *db* (sqlite:connect
-	      (concatenate 'string *fragrance-home* "/fragrances.db")))
+(defvar *db* (sqlite:connect (or
+			      (sb-unix::posix-getenv "FRAGRANCE_DB")
+			      "fragrances.db")))
 
 (defun formula-type (formula-name)
   (let ((columns
@@ -118,6 +119,77 @@
   (sqlite:execute-non-query
    *db*
    (format NIL "CREATE TABLE ~a (raw_material string, proportion integer)" formula-name)))
+
+(defun ctas-parent-query (experiment-id parent base-formula)
+  (let ((parent-table
+	  (if parent
+	      (format NIL "experiment_~a" parent)
+	      base-formula)))
+    (format NIL "CREATE TABLE experiment_~a AS SELECT * FROM ~a"
+	    experiment-id parent-table)))
+
+(defun new-experiment (name parent base-formula branches hypothesis conclusion)
+  (let ((columns '("name" "parent" "base_formula"
+		   "branches" "hypothesis" "conclusion"))
+	experiment-id)
+    (sqlite:execute-non-query
+     *db*
+     (format NIL
+	     "INSERT INTO experiments (~{~a~^, ~}) VALUES (?, ?, ?, ?, ?, ?)"
+	     columns)
+     name parent base-formula
+     (format NIL "~{~a~^,~}" branches)
+     hypothesis conclusion)
+    (setf experiment-id (sqlite:last-insert-rowid *db*))
+    (sqlite:execute-non-query
+     *db*
+     (ctas-parent-query experiment-id parent base-formula))
+    (sqlite:execute-non-query
+     *db*
+     "INSERT INTO experiments_by_table (tbl_name, experiment_id) VALUES (?, ?)"
+     base-formula experiment-id)
+    experiment-id))
+
+(defun select-experiment-query ()
+  (let ((columns '("name" "parent" "base_formula"
+		   "branches" "hypothesis" "conclusion")))
+    (format NIL "SELECT ~{~a~^, ~} FROM experiments WHERE rowid = ?"
+	    columns)))
+
+(defun parse-branches (branches-str)
+  (if (or (not branches-str)
+	  (string= branches-str ""))
+      NIL
+      (mapcar #'parse-integer
+	      (split-sequence:split-sequence #\, branches-str))))
+
+(defmethod print-object ((my-experiment experiment) stream)
+  (format stream "~a~%Variation on ~a~%~a~%~%Hypothesis: ~a~%~%"
+	  (experiment-name my-experiment)
+	  (experiment-base-formula my-experiment)
+	  (let ((parent (experiment-parent my-experiment)))
+	    (if parent (format "Parent experiment: ~a" parent) "root experiment"))
+	  (experiment-hypothesis my-experiment))
+  (format stream "~a" (formula-from-db
+		       (format NIL "experiment_~a" (experiment-id my-experiment))))
+  (format stream "~%Conclusion: ~a~%Branches:~%~:(~{~a~^~%~}~)~%"
+	  (experiment-conclusion my-experiment)
+	  (mapcar #'experiment-name (experiment-branches my-experiment))))
+
+(defun experiment-from-db (experiment-id)
+  (let ((query-result (car
+		       (sqlite:execute-to-list
+			*db*
+			(select-experiment-query)
+			experiment-id))))
+    (make-instance 'experiment
+		   :name (nth 0 query-result)
+		   :id experiment-id
+		   :parent (nth 1 query-result)
+		   :base-formula (nth 2 query-result)
+		   :branches (parse-branches (nth 3 query-result))
+		   :hypothesis (nth 4 query-result)
+		   :conclusion (nth 5 query-result))))
 
 (defun disconnect-db ()
   (sqlite:disconnect *db*))
