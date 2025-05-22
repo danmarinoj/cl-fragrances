@@ -12,7 +12,11 @@
 (defun list-tables (db)
   (mapcar
    #'car
-   (sqlite:execute-to-list db "SELECT name FROM sqlite_master WHERE type='table'")))
+   (sqlite:execute-to-list
+    db
+    (concatenate 'string
+		 "SELECT name FROM sqlite_master WHERE type='table' "
+		 "AND name LIKE 'formula_%'"))))
 
 (defun get-raw-materials-table (table-name)
   (format NIL "SELECT raw_material FROM ~a" table-name))

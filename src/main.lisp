@@ -1,22 +1,23 @@
 (in-package #:fragrances)
 
-;; ;; variables
-;; (defvar *completions-list*
-;;   (let ((tables (list-tables *db*)))
-;;     (let ((raw-materials (mapcar #'car (sqlite:execute-to-list
-;; 					*db*
-;; 					(build-raw-ingredient-query tables)))))
-;;       raw-materials)))
+;; variables
+(defvar *completions-list*
+  (let ((tables (concatenate 'list
+			     '("current_inventory" "suggestions")
+			     (list-tables *db*))))
+    (mapcar #'car (sqlite:execute-to-list
+		   *db*
+		   (build-raw-ingredient-query tables)))))
 
-;; ;; setup completion
-;; (defun custom-complete (text start end)
-;;   (let ((els (remove-if-not (lambda (it)
-;;                                          (str:starts-with? text it))
-;;                                        *completions-list*)))
-;;     (if (cdr els)
-;;         (cons (str:prefix els) els)
-;;         els)))
-;; (rl:register-function :complete #'custom-complete)
+;; setup completion
+(defun custom-complete (text start end)
+  (let ((els (remove-if-not (lambda (it)
+                                         (str:starts-with? text it))
+                                       *completions-list*)))
+    (if (cdr els)
+        (cons (str:prefix els) els)
+        els)))
+(rl:register-function :complete #'custom-complete)
 
 ;; define prompts
 (defun prompt (prompt)
@@ -33,37 +34,37 @@
   (format T "Formulas:~%")
   (let ((counter 0)
 	(tables (list-tables *db*)))
-    (dolist (table tables)
-      (format T "(~a) ~a~%" counter table)
+    (dolist (formula-id tables)
+      (format T "(~a) ~a~%" counter (decode-formula-name formula-id))
       (incf counter))
     (format T "~%")
     (let ((choice (prompt-value "Select formula")))
       (if (equal choice "q")
 	  ()
-	  (let ((formula-name (nth (parse-integer choice) tables)))
-	    (funcall on-choose-function formula-name))))))
+	  (let ((formula-id (nth (parse-integer choice) tables)))
+	    (funcall on-choose-function formula-id))))))
 
 (defun list-formulas-to-edit ()
   (list-formulas
-   #'(lambda (formula-name)
-       (modify-data-menu formula-name))))
+   #'(lambda (formula-id)
+       (modify-data-menu formula-id))))
 
-(defun experiment-menu (formula-name)
+(defun experiment-menu (formula-id)
   (let ((name (prompt-value "Experiment name"))
-	(base-formula formula-name)
+	(base-formula formula-id)
 	(hypothesis (prompt-value "Hypothesis"))
 	my-experiment)
     (setf my-experiment
 	  (experiment-from-db
-	   (new-experiment name NIL formula-name NIL hypothesis "")))
+	   (new-experiment name NIL formula-id NIL hypothesis "")))
     (modify-data-menu (format NIL "experiment_~a" (experiment-id my-experiment)))
     (let ((conclusion (prompt-value "Conclusion")))
       (setf (experiment-conclusion my-experiment) conclusion))
     (format T "~a" my-experiment)))
 
-(defun upsert-menu (formula-name operation)
+(defun upsert-menu (formula-id operation)
   (let (item
-	(formula-type (formula-type formula-name)))
+	(formula-type (formula-type formula-id)))
     (setf item
 	  (cond ((eq formula-type :formula)
 		 (let ((raw-material (prompt-value "Raw material"))
@@ -79,15 +80,15 @@
 		   (make-instance 'formula-item-no-c
 				  :raw-material raw-material
 				  :proportion proportion)))))
-    (iud-record item formula-name :operation operation)))
+    (iud-record item formula-id :operation operation)))
 
-(defun delete-menu (formula-name)
+(defun delete-menu (formula-id)
   (let ((raw-material (prompt-value "Raw material")))
     (iud-record (make-instance 'formula-item-no-c
 			       :raw-material raw-material)
-		formula-name :operation "d")))
+		formula-id :operation "d")))
 
-(defun import-accord-menu (formula-name)
+(defun import-accord-menu (formula-id)
   (list-formulas
    #'(lambda (accord-name)
        (let ((proportion (parse-integer (prompt-value "Proportion")))
@@ -95,11 +96,11 @@
 	 (destructuring-bind (accord-factor formula-factor)
 	     (import-accord-factors accord proportion)
 	   ;; update values in old formula
-	   (dolist (formula-tuple (formula-from-db formula-name))
-	     (update formula-name (car formula-tuple) (* formula-factor (cadr formula-tuple))))
+	   (dolist (formula-tuple (formula-from-db formula-id))
+	     (update formula-id (car formula-tuple) (* formula-factor (cadr formula-tuple))))
 	   ;; add the accord
 	   (dolist (formula-tuple accord)
-	     (insert formula-name (car formula-tuple) (* accord-factor (cadr formula-tuple)))))))))
+	     (insert formula-id (car formula-tuple) (* accord-factor (cadr formula-tuple)))))))))
 
 (defun bulk-import-menu (formula)
   (let (quit line)
@@ -125,29 +126,29 @@
 	   (formula-with-mass (formula-with-mass-from-formula formula unit)))
       (format T "~a" formula-with-mass))))
 
-(defun modify-data-menu (formula-name)
+(defun modify-data-menu (formula-id)
   (let ((help-message (concatenate 'string
 				   "(P)rint, (E)xperiment,~%"
 				   "(I)nsert, (U)pdate, (D)elete, Import (A)ccord,~%"
 				   "(B)ulk import, (C)alculate, (H)elp~%"))
-	(formula (formula-from-db formula-name))
+	(formula (formula-from-db formula-id))
 	choice)
     (format T help-message)
     (loop while (not (equal choice "q")) do
       (progn
-	(setf choice (prompt formula-name))
+	(setf choice (prompt (decode-formula-name formula-id)))
 	(cond ((equal choice "p")
 	       (format T "~a" formula))
 	      ((equal choice "e")
-	       (experiment-menu formula-name))
+	       (experiment-menu formula-id))
 	      ((equal choice "i")
-	       (setf formula (upsert-menu formula-name choice)))
+	       (setf formula (upsert-menu formula-id choice)))
 	      ((equal choice "u")
-	       (setf formula (upsert-menu formula-name choice)))
+	       (setf formula (upsert-menu formula-id choice)))
 	      ((equal choice "d")
-	       (setf formula (delete-menu formula-name)))
+	       (setf formula (delete-menu formula-id)))
 	      ((equal choice "a")
-	       (import-accord-menu formula-name))
+	       (import-accord-menu formula-id))
 	      ((equal choice "b")
 	       (setf formula (bulk-import-menu formula)))
 	      ((equal choice "c")
@@ -171,9 +172,10 @@
       (cond ((equal choice "l")
 	     (list-formulas-to-edit))
 	    ((equal choice "n")
-	     (let ((formula-name (prompt-value "New formula name")))
-	       (new-formula formula-name)
-	       (modify-data-menu formula-name)))
+	     (let ((formula-name (prompt-value "New formula name"))
+		   formula-id)
+	       (setf formula-id (new-formula formula-name))
+	       (modify-data-menu formula-id)))
 	    ((equal choice "d")
 	     (calculate-dilution-menu)))))
   (disconnect-db))

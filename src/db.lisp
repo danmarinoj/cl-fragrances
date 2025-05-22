@@ -4,19 +4,19 @@
 			      (sb-unix::posix-getenv "FRAGRANCE_DB")
 			      "fragrances.db")))
 
-(defun formula-type (formula-name)
+(defun formula-type (formula-id)
   (let ((columns
 	  (mapcar #'cadr (sqlite:execute-to-list *db*
 						 (format
 						  NIL
 						  "PRAGMA table_info(~a)"
-						  formula-name)))))
+						  formula-id)))))
     (if (member "concentration" columns :test #'string=)
 	:formula
 	:formula-no-c)))
 
-(defun formula-from-db (formula-name)
-  (cond ((eq (formula-type formula-name) :formula)
+(defun formula-from-db (formula-id)
+  (cond ((eq (formula-type formula-id) :formula)
 	 (let ((query-result (sqlite:execute-to-list
 			      *db*
 			      (format
@@ -24,17 +24,17 @@
 			       (concatenate 'string
 					    "SELECT raw_material, concentration, proportion FROM ~a "
 					    "ORDER BY proportion DESC")
-			       formula-name))))
+			       formula-id))))
 	   (make-instance
 	    'formula
-	    :name formula-name
+	    :id formula-id
 	    :items
 	    (mapcar #'(lambda (record) (make-instance 'formula-item
 						      :raw-material (car record)
 						      :concentration (cadr record)
 						      :proportion (caddr record)))
 		    query-result))))
-	((eq (formula-type formula-name) :formula-no-c)
+	((eq (formula-type formula-id) :formula-no-c)
 	 (let ((query-result (sqlite:execute-to-list
 			      *db*
 			      (format
@@ -42,10 +42,10 @@
 			       (concatenate 'string
 					    "SELECT raw_material, proportion FROM ~a "
 					    "ORDER BY proportion DESC")
-			       formula-name))))
+			       formula-id))))
 	   (make-instance
 	    'formula-no-c
-	    :name formula-name
+	    :name formula-id
 	    :items
 	    (mapcar #'(lambda (record) (make-instance 'formula-item-no-c
 						      :raw-material (car record)
@@ -53,20 +53,20 @@
 		    query-result))))))
 
 (defun formula-to-db (formula)
-  (let ((formula-name (formula-name formula)))
-    (sqlite:execute-non-query (format NIL "DELETE FROM ~a" formula-name))
+  (let ((formula-id (formula-id formula)))
+    (sqlite:execute-non-query (format NIL "DELETE FROM ~a" formula-id))
     (dolist (item (formula-items formula))
-      (iud-record item formula-name :operation "i"))))
+      (iud-record item formula-id :operation "i"))))
 
-(defgeneric iud-record (my-formula-item formula-name &key operation))
+(defgeneric iud-record (my-formula-item formula-id &key operation))
 (defmethod iud-record ((my-formula-item formula-item)
-		       formula-name &key operation)
+		       formula-id &key operation)
   (cond ((equal operation "i")
 	 (sqlite:execute-non-query
 	  *db*
 	  (format NIL
 		  "INSERT INTO ~a (raw_material, concentration, proportion) VALUES (?, ?, ?)"
-		  formula-name)
+		  formula-id)
 	  (get-raw-material my-formula-item)
 	  (get-concentration my-formula-item)
 	  (get-proportion my-formula-item)))
@@ -75,7 +75,7 @@
 	  *db*
 	  (format NIL
 		  "UPDATE ~a SET concentration = ~a, proportion = ~a WHERE raw_material = '~a'"
-		  formula-name
+		  formula-id
 		  (get-concentration my-formula-item)
 		  (get-proportion my-formula-item)
 		  (get-raw-material my-formula-item))))
@@ -84,18 +84,18 @@
 	  *db*
 	  (format NIL
 		  "DELETE FROM ~a WHERE raw_material = '~a'"
-		  formula-name
+		  formula-id
 		  (get-raw-material my-formula-item)))))
-  (formula-from-db formula-name))
+  (formula-from-db formula-id))
 
 (defmethod iud-record ((my-formula-item formula-item-no-c)
-		       formula-name &key operation)
+		       formula-id &key operation)
   (cond ((equal operation "i")
 	 (sqlite:execute-non-query
 	  *db*
 	  (format NIL
 		  "INSERT INTO ~a (raw_material, proportion) VALUES (?, ?)"
-		  formula-name)
+		  formula-id)
 	  (get-raw-material my-formula-item)
 	  (get-proportion my-formula-item)))
 	((equal operation "u")
@@ -103,7 +103,7 @@
 	  *db*
 	  (format NIL
 		  "UPDATE ~a SET proportion = ~a WHERE raw_material = '~a'"
-		  formula-name
+		  formula-id
 		  (get-proportion my-formula-item)
 		  (get-raw-material my-formula-item))))
 	((equal operation "d")
@@ -111,14 +111,18 @@
 	  *db*
 	  (format NIL
 		  "DELETE FROM ~a WHERE raw_material = '~a'"
-		  formula-name
+		  formula-id
 		  (get-raw-material my-formula-item)))))
-  (formula-from-db formula-name))
+  (formula-from-db formula-id))
 
 (defun new-formula (formula-name)
-  (sqlite:execute-non-query
-   *db*
-   (format NIL "CREATE TABLE ~a (raw_material string, proportion integer)" formula-name)))
+  (let ((formula-id (encode-formula-name formula-name)))
+    (sqlite:execute-non-query
+     *db*
+     (format NIL
+	     "CREATE TABLE ~a (raw_material string, concentration integer, proportion integer)"
+	     formula-id))
+    formula-id))
 
 (defun ctas-parent-query (experiment-id parent base-formula)
   (let ((parent-table
@@ -168,7 +172,7 @@
 	  (experiment-name my-experiment)
 	  (experiment-base-formula my-experiment)
 	  (let ((parent (experiment-parent my-experiment)))
-	    (if parent (format "Parent experiment: ~a" parent) "root experiment"))
+	    (if parent (format stream "Parent experiment: ~a" parent) "root experiment"))
 	  (experiment-hypothesis my-experiment))
   (format stream "~a" (formula-from-db
 		       (format NIL "experiment_~a" (experiment-id my-experiment))))

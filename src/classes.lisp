@@ -18,7 +18,12 @@
 (defclass formula-no-c ()
   ((name :accessor formula-name
 	 :initarg :name
-	 :type string)
+	 :type string
+	 :initform "")
+   (id :accessor formula-id
+       :initarg :id
+       :type string
+       :initform "")
    (items :accessor formula-items
 	  :initarg :items
 	  :type list)
@@ -48,7 +53,28 @@
   (reduce #'(lambda (running-sum item) (+ running-sum (get-proportion item)))
 	  (formula-items my-formula) :initial-value 0))
 
+(defun encode-formula-name (formula-name)
+  (format NIL "formula_~a"
+	  (substitute #\_ #\=
+		      (cl-base64:string-to-base64-string formula-name))))
+
+(defun decode-formula-name (formula-id)
+  (if (eq (search "experiment_" formula-id) 0)
+      formula-id			;experiment case
+      (cl-base64:base64-string-to-string
+       (substitute #\= #\_
+		   (subseq formula-id 8)))))
+
 (defmethod initialize-instance :after ((my-formula formula-no-c) &key)
+  ;; set formula id or formula name if missing
+  (if (string= (formula-id my-formula) "")
+      (setf (formula-id my-formula)
+	    (encode-formula-name (formula-name my-formula))))
+  (if (string= (formula-name my-formula) "")
+      (setf (formula-name my-formula)
+	    (decode-formula-name (formula-id my-formula))))
+
+  ;; compute percentages
   (let ((total-parts (compute-total-parts my-formula)))
     (dolist (item (formula-items my-formula))
       (let ((percentage (* 100 (float (/ (get-proportion item) total-parts)))))
