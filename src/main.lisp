@@ -49,18 +49,67 @@
    #'(lambda (formula-id)
        (modify-data-menu formula-id))))
 
-(defun experiment-menu (formula-id)
+(defun experiment-next-menu (parent base-formula branches)
+  (let ((experiments-hash (get-experiments-hash branches)))
+    (dolist (experiment-id branches)
+      (format T "(~a) ~a~%"
+	      experiment-id
+	      (experiment-name (gethash experiment-id experiments-hash))))
+    (format T "~%~%(N)ew experiment, (A)ccept result~%")
+    (let ((choice (prompt parent)))
+      (cond ((equal choice "n")
+	     (experiment-create-menu parent base-formula))
+	    ((equal choice "a")
+	     (let ((source-formula (formula-from-db parent))
+		   (target-formula (formula-from-db base-formula)))
+	       (setf (formula-items target-formula)
+		     (formula-items source-formula))
+	       (formula-to-db target-formula)))
+	    ((equal choice "q") NIL)
+	    (T
+	     (let ((experiment
+		     (gethash (parse-integer choice)
+			      experiments-hash)))
+	       (display-experiment-menu experiment)))))))
+
+(defun display-experiment-menu (my-experiment)
+  (format T "~a" my-experiment)
+  (experiment-next-menu (experiment-id my-experiment)
+			(experiment-base-formula my-experiment)
+			(experiment-branches my-experiment)))
+
+(defun experiment-create-menu (parent base-formula)
   (let ((name (prompt-value "Experiment name"))
-	(base-formula formula-id)
 	(hypothesis (prompt-value "Hypothesis"))
-	my-experiment)
-    (setf my-experiment
-	  (experiment-from-db
-	   (new-experiment name NIL formula-id NIL hypothesis "")))
-    (modify-data-menu (format NIL "experiment_~a" (experiment-id my-experiment)))
+	experiment-id)
+    (setf experiment-id
+	  (new-experiment name parent base-formula NIL hypothesis))
+    (modify-data-menu (encode-formula-name experiment-id))
+    ;; update conclusion and parent branches
     (let ((conclusion (prompt-value "Conclusion")))
-      (setf (experiment-conclusion my-experiment) conclusion))
-    (format T "~a" my-experiment)))
+      (update-conclusion experiment-id conclusion))
+    (if parent
+	(update-branches parent experiment-id))
+    ;; proceed to next menu
+    (experiment-next-menu experiment-id base-formula NIL)))
+
+(defun experiments-top-level (formula-id)
+  (destructuring-bind (experiment-ids experiments-hash)
+      (list-experiments-by-formula formula-id)
+    (format T "Experiments:~%")
+    (dolist (id experiment-ids)
+      (format T "(~a) ~a~%" id (experiment-name (gethash id experiments-hash))))
+    (format T "~%")
+    (let ((choice (prompt-value "Select experiment or create new (N)")))
+      (cond ((equal choice "q")
+	     ())
+	    ((equal choice "n")
+	     (experiment-create-menu NIL formula-id))
+	    (T
+	     (let ((experiment
+		     (gethash (parse-integer choice)
+			      experiments-hash)))
+	       (display-experiment-menu experiment)))))))
 
 (defun upsert-menu (formula-id operation)
   (let (item
@@ -140,7 +189,7 @@
 	(cond ((equal choice "p")
 	       (format T "~a" formula))
 	      ((equal choice "e")
-	       (experiment-menu formula-id))
+	       (experiments-top-level formula-id))
 	      ((equal choice "i")
 	       (setf formula (upsert-menu formula-id choice)))
 	      ((equal choice "u")

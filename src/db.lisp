@@ -127,32 +127,44 @@
 (defun ctas-parent-query (experiment-id parent base-formula)
   (let ((parent-table
 	  (if parent
-	      (format NIL "experiment_~a" parent)
+	      (encode-formula-name parent)
 	      base-formula)))
-    (format NIL "CREATE TABLE experiment_~a AS SELECT * FROM ~a"
-	    experiment-id parent-table)))
+    (format NIL "CREATE TABLE ~a AS SELECT * FROM ~a"
+	    (encode-formula-name experiment-id)
+	    parent-table)))
 
-(defun new-experiment (name parent base-formula branches hypothesis conclusion)
+(defun new-experiment (name parent base-formula branches hypothesis)
   (let ((columns '("name" "parent" "base_formula"
-		   "branches" "hypothesis" "conclusion"))
+		   "branches" "hypothesis"))
 	experiment-id)
     (sqlite:execute-non-query
      *db*
      (format NIL
-	     "INSERT INTO experiments (~{~a~^, ~}) VALUES (?, ?, ?, ?, ?, ?)"
+	     "INSERT INTO experiments (~{~a~^, ~}) VALUES (?, ?, ?, ?, ?)"
 	     columns)
      name parent base-formula
      (format NIL "~{~a~^,~}" branches)
-     hypothesis conclusion)
+     hypothesis)
     (setf experiment-id (sqlite:last-insert-rowid *db*))
+
+    ;; populate formula from parent
     (sqlite:execute-non-query
      *db*
      (ctas-parent-query experiment-id parent base-formula))
-    (sqlite:execute-non-query
-     *db*
-     "INSERT INTO experiments_by_table (tbl_name, experiment_id) VALUES (?, ?)"
-     base-formula experiment-id)
+
+    ;; only set this if its a top-level formula
+    (if (not parent)
+	(sqlite:execute-non-query
+	 *db*
+	 "INSERT INTO experiments_by_table (tbl_name, experiment_id) VALUES (?, ?)"
+	 base-formula experiment-id))
     experiment-id))
+
+(defun update-conclusion (experiment-id conclusion)
+  (sqlite:execute-non-query
+   *db*
+   "UPDATE experiments SET conclusion = ? WHERE rowid = ?"
+   conclusion experiment-id))
 
 (defun select-experiment-query ()
   (let ((columns '("name" "parent" "base_formula"
@@ -168,17 +180,22 @@
 	      (split-sequence:split-sequence #\, branches-str))))
 
 (defmethod print-object ((my-experiment experiment) stream)
-  (format stream "~a~%Variation on ~a~%~a~%~%Hypothesis: ~a~%~%"
+  (format stream "~c[33m~a~%Variation on ~a~%~a~%~%Hypothesis:~c[0m ~a~%~%"
+	  #\ESC
 	  (experiment-name my-experiment)
-	  (experiment-base-formula my-experiment)
+	  (decode-formula-name (experiment-base-formula my-experiment))
 	  (let ((parent (experiment-parent my-experiment)))
 	    (if parent (format stream "Parent experiment: ~a" parent) "root experiment"))
+	  #\ESC
 	  (experiment-hypothesis my-experiment))
   (format stream "~a" (formula-from-db
-		       (format NIL "experiment_~a" (experiment-id my-experiment))))
-  (format stream "~%Conclusion: ~a~%Branches:~%~:(~{~a~^~%~}~)~%"
+		       (encode-formula-name (experiment-id my-experiment))))
+  (format stream "~%~c[33mConclusion:~c[0m ~a~%~c[33mBranches:~c[0m~%"
+	  #\ESC
+	  #\ESC
 	  (experiment-conclusion my-experiment)
-	  (mapcar #'experiment-name (experiment-branches my-experiment))))
+	  #\ESC
+	  #\ESC))
 
 (defun experiment-from-db (experiment-id)
   (let ((query-result (car
@@ -194,6 +211,41 @@
 		   :branches (parse-branches (nth 3 query-result))
 		   :hypothesis (nth 4 query-result)
 		   :conclusion (nth 5 query-result))))
+
+(defun get-experiments-hash (experiment-ids)
+  (let ((experiments-hash (make-hash-table)))
+    (dolist (experiment-id experiment-ids)
+      (setf (gethash experiment-id experiments-hash)
+	    (experiment-from-db experiment-id)))
+    experiments-hash))
+
+(defun list-experiments-by-formula (formula-id)
+  (let ((experiment-ids
+	  (mapcar #'car
+		  (sqlite:execute-to-list
+		   *db*
+		   (concatenate
+		    'string
+		    "SELECT experiment_id FROM experiments_by_table WHERE tbl_name = ? "
+		    "ORDER BY experiment_id ASC")
+		   formula-id))))
+    (list experiment-ids
+	  (get-experiments-hash experiment-ids))))
+
+(defun update-branches (experiment-id child)
+  (let ((current-branches (sqlite:execute-single
+			   *db*
+			   "SELECT branches FROM experiments WHERE rowid = ?"
+			   experiment-id))
+	updated-branches)
+    (setf updated-branches
+	  (if (and current-branches
+		   (not (equal current-branches "")))
+	      (format NIL "~a,~a" current-branches child)
+	      child))
+    (sqlite:execute-non-query *db*
+			      "UPDATE experiments SET branches = ? WHERE rowid = ?"
+			      updated-branches experiment-id)))
 
 (defun disconnect-db ()
   (sqlite:disconnect *db*))

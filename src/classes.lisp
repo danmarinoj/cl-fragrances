@@ -54,9 +54,11 @@
 	  (formula-items my-formula) :initial-value 0))
 
 (defun encode-formula-name (formula-name)
-  (format NIL "formula_~a"
-	  (substitute #\_ #\=
-		      (cl-base64:string-to-base64-string formula-name))))
+  (if (equal (car (type-of formula-name)) 'integer)
+      (format NIL "experiment_~a" formula-name) ;experiment case
+      (format NIL "formula_~a"
+	      (substitute #\_ #\=
+			  (cl-base64:string-to-base64-string formula-name)))))
 
 (defun decode-formula-name (formula-id)
   (if (eq (search "experiment_" formula-id) 0)
@@ -194,3 +196,5 @@
 	       :initarg :conclusion
 	       :initform ""
 	       :type string)))
+
+(defgeneric update-conclusion (my-experiment conclusion))
