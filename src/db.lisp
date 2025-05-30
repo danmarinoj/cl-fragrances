@@ -54,7 +54,7 @@
 
 (defun formula-to-db (formula)
   (let ((formula-id (formula-id formula)))
-    (sqlite:execute-non-query (format NIL "DELETE FROM ~a" formula-id))
+    (sqlite:execute-non-query *db* (format NIL "DELETE FROM ~a" formula-id))
     (dolist (item (formula-items formula))
       (iud-record item formula-id :operation "i"))))
 

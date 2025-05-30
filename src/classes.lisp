@@ -96,7 +96,7 @@
   (let ((outrow (copy-list row)))
     (dolist (index columns-to-round)
       (setf (nth index outrow)
-	    (format NIL "~,1f" (nth index outrow))))
+	    (format NIL "~,2f" (nth index outrow))))
     outrow))
 
 (defun tabulate (formula-name data column-names columns-to-round stream)

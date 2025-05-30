@@ -56,11 +56,11 @@
 	      experiment-id
 	      (experiment-name (gethash experiment-id experiments-hash))))
     (format T "~%~%(N)ew experiment, (A)ccept result~%")
-    (let ((choice (prompt parent)))
+    (let ((choice (prompt (encode-formula-name parent))))
       (cond ((equal choice "n")
 	     (experiment-create-menu parent base-formula))
 	    ((equal choice "a")
-	     (let ((source-formula (formula-from-db parent))
+	     (let ((source-formula (formula-from-db (encode-formula-name parent)))
 		   (target-formula (formula-from-db base-formula)))
 	       (setf (formula-items target-formula)
 		     (formula-items source-formula))
