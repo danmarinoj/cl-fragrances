@@ -185,7 +185,7 @@
 	  (experiment-name my-experiment)
 	  (decode-formula-name (experiment-base-formula my-experiment))
 	  (let ((parent (experiment-parent my-experiment)))
-	    (if parent (format stream "Parent experiment: ~a" parent) "root experiment"))
+	    (if parent (format NIL "Parent experiment: ~a" parent) "root experiment"))
 	  #\ESC
 	  (experiment-hypothesis my-experiment))
   (format stream "~a" (formula-from-db
