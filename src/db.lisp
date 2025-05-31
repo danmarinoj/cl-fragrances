@@ -208,7 +208,8 @@
 		   :id experiment-id
 		   :parent (nth 1 query-result)
 		   :base-formula (nth 2 query-result)
-		   :branches (parse-branches (nth 3 query-result))
+		   :branches (parse-branches
+			      (format NIL "~a" (nth 3 query-result)))
 		   :hypothesis (nth 4 query-result)
 		   :conclusion (nth 5 query-result))))
 
